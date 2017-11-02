@@ -25,33 +25,35 @@ public class UDPReceive : MonoBehaviour {
     GameObject leftBottomCross;
     GameObject focus;
     GameObject gaze;
-    GameObject log;
-    int target = 0;
+	GameObject log;
+	GameObject leftPupilObj;
+	GameObject rightPupilObj;
+	int target = 0;
     Point leftPupil, rightPupil;
 
-    Mat h;
+    Mat h = new Mat(3, 3, MatType.CV_64FC1, new double[] { 0,0,0, 0,0,0, 0,0,0 });
     bool calcMode = true;
 
     // Use this for initialization
     Vector3 t = new Vector3(0, 0.1f, 0);
     void Start () {
-   
         udp = new UdpClient(LOCA_LPORT);
         udp.Client.ReceiveTimeout = 1000;
         thread = new Thread(new ThreadStart(ThreadMethod));
         thread.Start();
         pupils = new Point[4];
         unity = new Vector3[4];
-        h = new Mat(3, 3, MatType.CV_32FC1);
         leftTopCross = GameObject.Find("LeftTop");
         rightTopCross = GameObject.Find("RightTop");
         rightBottomCross = GameObject.Find("RightBottom");
         leftBottomCross = GameObject.Find("LeftBottom");
         focus = GameObject.Find("Focus");
         gaze = GameObject.Find("Gaze");
-        log = GameObject.Find("Log");
+		log = GameObject.Find("Log");
+		leftPupilObj = GameObject.Find("LeftPupil");
+		rightPupilObj = GameObject.Find("RightPupil");
 
-        unity[0] = leftTopCross.transform.position;
+		unity[0] = leftTopCross.transform.position;
         unity[1] = rightTopCross.transform.position;
         unity[2] = rightBottomCross.transform.position;
         unity[3] = leftBottomCross.transform.position;
@@ -71,74 +73,93 @@ public class UDPReceive : MonoBehaviour {
             calcMode = !calcMode;
         }
 
-        if (calcMode)
+        if (Input.GetKey(KeyCode.Space))
         {
+            // leftTopCross.transform.position = new Vector3(leftX, leftY, 0);
+            pupils[target] = leftPupil;
+			leftPupilObj.GetComponent<TextMesh>().text = leftPupil.x + ", " + leftPupil.y;
+			rightPupilObj.GetComponent<TextMesh>().text = rightPupil.x + ", " + rightPupil.y;
+		}
+		else if (Input.GetKey(KeyCode.Return))
+        {
+            double[] pp = new double[]
+            {
+                pupils[0].x, pupils[0].y,
+                pupils[1].x, pupils[1].y,
+                pupils[2].x, pupils[2].y,
+                pupils[3].x, pupils[3].y,
+            };
+            double[] up = new double[]
+            {
+                unity[0].x, unity[0].y,
+                unity[1].x, unity[1].y,
+                unity[2].x, unity[2].y,
+                unity[3].x, unity[3].y,
+            };
 
-            if (Input.GetKey(KeyCode.Space))
-            {
-                // leftTopCross.transform.position = new Vector3(leftX, leftY, 0);
-                pupils[target] = leftPupil;
-            }
-            else if (Input.GetKey(KeyCode.Return))
-            {
-                float[] pp = new float[]
-                {
-                    pupils[0].x, pupils[0].y,
-                    pupils[1].x, pupils[1].y,
-                    pupils[2].x, pupils[2].y,
-                    pupils[3].x, pupils[3].y,
-                };
-                float[] up = new float[]
-                {
-                    unity[0].x, unity[0].y,
-                    unity[1].x, unity[1].y,
-                    unity[2].x, unity[2].y,
-                    unity[3].x, unity[3].y,
-                };
+			Debug.LogWarning(pp);
+			Debug.LogWarning(up);
 
-                Mat p = new Mat(4, 2, MatType.CV_64FC1, pp);
-                Mat s = new Mat(4, 2, MatType.CV_64FC1, up);
-
-                h = Cv2.FindHomography(p, s);
-                Debug.Log(h);
-            }
-            else if (Input.GetKey(KeyCode.Alpha1))
-            {
-                target = 0;
-                focus.transform.position = unity[target] + t;
-            }
-            else if (Input.GetKey(KeyCode.Alpha2))
-            {
-                target = 1;
-                focus.transform.position = unity[target] + t;
-            }
-            else if (Input.GetKey(KeyCode.Alpha3))
-            {
-                target = 2;
-                focus.transform.position = unity[target] + t;
-            }
-            else if (Input.GetKey(KeyCode.Alpha4))
-            {
-                target = 3;
-                focus.transform.position = unity[target] + t;
-            }
-            log.GetComponent<TextMesh>().text = "LOOK";
+			Mat p = new Mat(4, 2, MatType.CV_64FC1, pp);
+            Mat s = new Mat(4, 2, MatType.CV_64FC1, up);
+            Mat hm = Cv2.FindHomography(p, s);
+			if (hm.Size().Width > 0)
+			{
+				h = hm;
+				Debug.LogWarning("OK");
+			}
+			else
+			{
+				Debug.LogWarning("Bad Points");
+			}
         }
-        else
+        else if (Input.GetKey(KeyCode.Alpha1))
         {
-            Mat lp = new Mat(3, 1, MatType.CV_64FC1, new float[] {
-                leftPupil.x, leftPupil.y, 1,
+            target = 0;
+            focus.transform.position = unity[target] + t;
+        }
+        else if (Input.GetKey(KeyCode.Alpha2))
+        {
+            target = 1;
+            focus.transform.position = unity[target] + t;
+        }
+        else if (Input.GetKey(KeyCode.Alpha3))
+        {
+            target = 2;
+            focus.transform.position = unity[target] + t;
+        }
+        else if (Input.GetKey(KeyCode.Alpha4))
+        {
+            target = 3;
+            focus.transform.position = unity[target] + t;
+		}
+
+		string str = "";
+		for (int i=0; i<9; i++)
+		{
+			int c = i % 3;
+			int r = i / 3;
+
+			str += h.At<double>(r, c) + ", " + (c == 2 ? "\n" : "");
+		}
+
+		log.GetComponent<TextMesh>().text = str;
+
+		if (! calcMode)
+		{
+			Mat lp = new Mat(3, 1, MatType.CV_64FC1, new double[] {
+                leftPupil.x, leftPupil.y, 1
             });
 
             Mat g = h * lp;
-            gaze.transform.position = new Vector3(g.At<float>(0), g.At<float>(1), 0.3f);
-            string str = g.At<float>(0) + ", " + g.At<float>(1);
+            gaze.transform.position = new Vector3((float) g.At<double>(0, 0), (float) g.At<double>(1, 0), 0.3f);
+            str = g.At<double>(0, 0) + ", " + g.At<double>(1, 0);
             log.GetComponent<TextMesh>().text = str;
         }
-    }
+	}
 
 
-    void OnApplicationQuit()
+	void OnApplicationQuit()
     {
         thread.Abort();        
     }
